@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fourier Lab: Orange Edition</title>
+    <style>
+        /* --- ESTÉTICA "INSTRUMENTO DE LABORATORIO" --- */
+        :root {
+            --bg-deep: #050505;        /* Negro casi puro */
+            --bg-panel: #111111;       /* Gris muy oscuro para paneles */
+            --border: #333333;         /* Bordes sutiles */
+            
+            --signal-out: #00aaff;     /* AZUL (Señal Filtrada) */
+            --signal-in: #00ff00;      /* Verde brillante (Señal Entrada) */
+            --spec-yellow: #ffff00;    /* Amarillo (Magnitud) */
+            --phase-red: #ff003c;      /* Rojo (Fase) */
+            --grid-color: #002200;     /* Verde muy tenue para rejillas */
+            --text-main: #cccccc;
+            --text-highlight: #ffffff;
+            --danger: #ff3333;
+        }
+
+        body {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- LAYOUT GRID --- */
+        .app-shell {
+            display: grid;
+            height: 100%;
+            grid-template-rows: auto 1fr; /* Header | Contenido */
+        }
+
+        header {
+            background: #000;
+            border-bottom: 1px solid var(--signal-out);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 0 15px rgba(0, 170, 255, 0.2); /* Resplandor Azul */
+            z-index: 10;
+        }
+
+        h1 { margin: 0; font-size: 1.2rem; color: var(--signal-out); letter-spacing: 2px; text-transform: uppercase; }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 320px 1fr; /* Sidebar fijo | Gráficas flexibles */
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* --- SIDEBAR (CONTROLES) --- */
+        aside {
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border);
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .control-section {
+            border: 1px solid var(--border);
+            padding: 10px;
+            border-radius: 4px;
+            background: #0a0a0a;
+        }
+
+        .section-title {
+            color: var(--text-highlight);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* --- GRÁFICAS (MAIN) --- */
+        main {
+            display: grid;
+            grid-template-rows: 1.2fr 1fr; 
+            padding: 15px;
+            gap: 15px;
+            background: var(--bg-deep);
+            position: relative;
+        }
+
+        .spectrum-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            min-height: 0; /* Importante para que el grid no se desborde */
+        }
+
+        .canvas-container {
+            position: relative;
+            background: #000;
+            border: 1px solid #222;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%; /* El canvas llena el contenedor flex */
+            flex-grow: 1;
+        }
+
+        .chart-label {
+            position: absolute;
+            top: 5px;
+            left: 10px;
+            font-size: 0.75rem;
+            color: #555;
+            pointer-events: none;
+            z-index: 5;
+            background: rgba(0,0,0,0.5);
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+
+        /* --- UI COMPONENTS --- */
+        .digital-display {
+            background: #001a1a; /* Fondo azul muy oscuro */
+            color: var(--signal-out);
+            border: 1px solid #004444;
+            padding: 2px 6px;
+            font-size: 0.8rem;
+            min-width: 50px;
+            text-align: right;
+            border-radius: 2px;
+            font-family: 'Courier New', monospace;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none; width: 100%; background: transparent; margin: 5px 0;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; background: #333; border-radius: 2px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 14px; width: 14px; border-radius: 0;
+            background: var(--text-main); margin-top: -5px; cursor: pointer; border: 1px solid #000;
+        }
+        input[type=range]:focus::-webkit-slider-thumb { background: var(--signal-out); }
+
+        .harmonic-row { display: flex; flex-direction: column; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px dashed #222; }
+        .row-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .slider-group { display: flex; align-items: center; gap: 8px; font-size: 0.7rem; color: #777; }
+        .slider-group label { width: 30px; }
+
+        .btn-group { display: flex; gap: 5px; flex-wrap: wrap; }
+        .btn {
+            background: #222; color: #fff; border: 1px solid #444;
+            padding: 6px 12px; font-family: inherit; font-size: 0.75rem;
+            cursor: pointer; flex: 1; text-transform: uppercase; transition: all 0.2s;
+        }
+        .btn:hover { border-color: var(--signal-out); color: var(--signal-out); background: #111; }
+        .btn-reset:hover { border-color: var(--danger); color: var(--danger); }
+
+        #clip-indicator {
+            width: 12px; height: 12px; background: #330000; border-radius: 50%;
+            display: inline-block; margin-left: 10px; transition: background 0.1s;
+        }
+        #clip-indicator.clipping { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+
+        @media (max-width: 900px) {
+            .main-grid { grid-template-columns: 1fr; grid-template-rows: auto 1fr; overflow-y: auto; }
+            aside { max-height: 300px; border-bottom: 1px solid var(--border); }
+            main { display: flex; flex-direction: column; height: auto; }
+            .canvas-container { height: 250px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-shell">
+    <header>
+        <div style="display:flex; align-items:center;">
+            <h1>Fourier<span style="color:#fff">Lab</span></h1>
+            <span style="font-size:0.7rem; color:#666; margin-left:10px;">BLUE PRO</span>
+        </div>
+        <div style="display:flex; align-items:center;">
+            <span style="font-size:0.7rem; margin-right:5px; color:#555">CLIP</span>
+            <div id="clip-indicator" title="Alerta de Saturación"></div>
+            <button class="btn" id="animBtn" style="margin-left: 20px; width: 40px;">⏯</button>
+        </div>
+    </header>
+
+    <div class="main-grid">
+        <aside>
+            <div class="control-section">
+                <div class="section-title">Generador de Funciones</div>
+                <div class="btn-group" style="margin-bottom: 15px;">
+                    <button class="btn" onclick="setPreset('sine')">Sen</button>
+                    <button class="btn" onclick="setPreset('square')">Cuad</button>
+                    <button class="btn" onclick="setPreset('triangle')">Tri</button>
+                    <button class="btn" onclick="setPreset('saw')">Sierr</button>
+                </div>
+                <div id="harmonics-container">
+                </div>
+            </div>
+
+            <div class="control-section">
+                <div class="section-title">Filtro Analógico (VCF)</div>
+                <div style="margin-bottom: 10px;">
+                    <select id="filterType" style="width:100%; background:#000; color:white; border:1px solid #333; padding:5px; font-family:inherit;">
+                        <option value="butterworth">Butterworth (Plano)</option>
+                        <option value="chebyshev">Chebyshev (Rizado)</option>
+                    </select>
+                </div>
+                
+                <div class="harmonic-row" style="border:none;">
+                    <div class="row-header">
+                        <span style="font-size:0.75rem; color:#aaa;">Corte (Fc)</span>
+                        <div class="digital-display" id="disp-fc">1000 Hz</div>
+                    </div>
+                    <input type="range" id="cutoff" min="100" max="5000" step="50" value="1000">
+                </div>
+
+                <div class="harmonic-row" style="border:none;">
+                    <div class="row-header">
+                        <span style="font-size:0.75rem; color:#aaa;">Orden (Polos n)</span>
+                        <div class="digital-display" id="disp-order">2</div>
+                    </div>
+                    <input type="range" id="order" min="1" max="8" step="1" value="2">
+                </div>
+            </div>
+
+            <button class="btn btn-reset" onclick="resetAll()" style="margin-top:auto;">RESET SISTEMA</button>
+        </aside>
+
+        <main>
+            <div class="canvas-container" id="container-time">
+                <span class="chart-label" style="color:var(--signal-in)">OSCILOSCOPIO (VERDE: ENTRADA | AZUL: SALIDA)</span>
+                <canvas id="timeCanvas"></canvas>
+            </div>
+
+            <div class="spectrum-row">
+                <div class="canvas-container">
+                    <span class="chart-label" style="color: var(--spec-yellow)">MAGNITUD (dB)</span>
+                    <canvas id="magCanvas"></canvas>
+                </div>
+                <div class="canvas-container">
+                    <span class="chart-label" style="color: var(--phase-red)">FASE (°)</span>
+                    <canvas id="phaseCanvas"></canvas>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+    /* --- CONFIGURACIÓN DEL SISTEMA --- */
+    const CONFIG = {
+        harmonics: 5,
+        baseFreq: 200,
+        colors: {
+            grid: '#002200',
+            inputSignal: '#00ff00',  // Verde brillante (Entrada)
+            outputSignal: '#00aaff', // AZUL (Salida filtrada)
+            magnitude: '#ffff00',    // Amarillo
+            phase: '#ff003c',        // Rojo
+            bodeLine: '#666666'      // Gris
+        }
+    };
+
+    /* --- ESTADO --- */
+    let state = {
+        harmonics: Array.from({length: CONFIG.harmonics}, (_, i) => ({
+            amp: i===0 ? 80 : 0, 
+            freq: (i+1) * CONFIG.baseFreq
+        })),
+        filter: { fc: 1000, n: 2, type: 'butterworth' },
+        animating: true,
+        time: 0
+    };
+
+    /* --- GENERADOR UI --- */
+    const container = document.getElementById('harmonics-container');
+    
+    state.harmonics.forEach((h, i) => {
+        const div = document.createElement('div');
+        div.className = 'harmonic-row';
+        div.innerHTML = `
+            <div class="row-header">
+                <span style="font-size:0.75rem; color:var(--text-main)">H${i+1}</span>
+            </div>
+            
+            <div class="slider-group">
+                <label>Amp</label>
+                <input type="range" min="0" max="100" value="${h.amp}" data-idx="${i}" data-type="amp">
+                <div class="digital-display" id="disp-amp-${i}">${h.amp}</div>
+            </div>
+            
+            <div class="slider-group">
+                <label>Hz</label>
+                <input type="range" min="50" max="5000" step="10" value="${h.freq}" data-idx="${i}" data-type="freq">
+                <div class="digital-display" id="disp-freq-${i}">${h.freq}</div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+
+    /* --- EVENT LISTENERS --- */
+    container.addEventListener('input', (e) => {
+        if(e.target.tagName === 'INPUT') {
+            const idx = e.target.dataset.idx;
+            const type = e.target.dataset.type;
+            const val = parseFloat(e.target.value);
+            state.harmonics[idx][type] = val;
+            document.getElementById(`disp-${type}-${idx}`).innerText = val;
+            if(!state.animating) renderTimeDomain();
+            if(type === 'freq') renderBode();
+        }
+    });
+
+    const elFc = document.getElementById('cutoff');
+    const elOrd = document.getElementById('order');
+    const elType = document.getElementById('filterType');
+
+    function updateFilterState() {
+        state.filter.fc = parseFloat(elFc.value);
+        state.filter.n = parseInt(elOrd.value);
+        state.filter.type = elType.value;
+        
+        document.getElementById('disp-fc').innerText = state.filter.fc + " Hz";
+        document.getElementById('disp-order').innerText = state.filter.n;
+        
+        renderBode();
+        if(!state.animating) renderTimeDomain();
+    }
+
+    elFc.addEventListener('input', updateFilterState);
+    elOrd.addEventListener('input', updateFilterState);
+    elType.addEventListener('change', updateFilterState);
+
+    document.getElementById('animBtn').addEventListener('click', () => {
+        state.animating = !state.animating;
+        if(state.animating) animate();
+    });
+
+    /* --- PRESETS --- */
+    function setPreset(type) {
+        state.harmonics.forEach((h, i) => {
+            h.amp = 0;
+            h.freq = (i+1) * CONFIG.baseFreq; 
+            document.querySelector(`input[data-idx="${i}"][data-type="freq"]`).value = h.freq;
+            document.getElementById(`disp-freq-${i}`).innerText = h.freq;
+        });
+
+        if(type === 'sine') state.harmonics[0].amp = 80;
+        if(type === 'square') {
+            state.harmonics.forEach((h,i) => { if((i+1)%2!==0) h.amp = 80/(i+1); });
+        }
+        if(type === 'triangle') {
+            state.harmonics.forEach((h,i) => { if((i+1)%2!==0) h.amp = 80/Math.pow(i+1, 2); });
+        }
+        if(type === 'saw') {
+            state.harmonics.forEach((h,i) => h.amp = 80/(i+1));
+        }
+
+        state.harmonics.forEach((h, i) => {
+            document.querySelector(`input[data-idx="${i}"][data-type="amp"]`).value = h.amp;
+            document.getElementById(`disp-amp-${i}`).innerText = h.amp.toFixed(1);
+        });
+        
+        renderBode();
+        if(!state.animating) renderTimeDomain();
+    }
+
+    function resetAll() {
+        setPreset('sine');
+        elFc.value = 1000; elOrd.value = 2; elType.value = 'butterworth';
+        updateFilterState();
+    }
+
+    /* --- MATH ENGINE (CORREGIDO) --- */
+    function calculateTransferFunction(f) {
+        const { fc, n, type } = state.filter;
+        const s = 2 * Math.PI * f; // Variable de Laplace imaginaria pura (s = jω)
+        const wc = 2 * Math.PI * fc;
+        
+        let numerator = { re: 1, im: 0 }; // Comienza en 1
+        let denominator = { re: 1, im: 0 }; // Comienza en 1
+
+        if (type === 'butterworth') {
+            // Normalizar ganancia DC
+            numerator.re = Math.pow(wc, n);
+            
+            // Calcular polos de Butterworth
+            for (let k = 1; k <= n; k++) {
+                const angle = Math.PI * (0.5 + (2 * k - 1) / (2 * n));
+                const poleRe = wc * Math.cos(angle);
+                const poleIm = wc * Math.sin(angle);
+                
+                // Multiplicar denominador por (s - polo)
+                // donde s = jω, polo = poleRe + j*poleIm
+                // (jω - (poleRe + j*poleIm)) = -poleRe + j(ω - poleIm)
+                const factorRe = -poleRe;
+                const factorIm = s - poleIm;
+                
+                const newRe = denominator.re * factorRe - denominator.im * factorIm;
+                const newIm = denominator.re * factorIm + denominator.im * factorRe;
+                denominator.re = newRe;
+                denominator.im = newIm;
+            }
+        } else { // Chebyshev Tipo I
+            const ripple_dB = 1; // 1 dB de rizado
+            const eps = Math.sqrt(Math.pow(10, ripple_dB / 10) - 1);
+            const beta = Math.asinh(1 / eps) / n;
+            
+            // Calcular polos de Chebyshev
+            for (let k = 1; k <= n; k++) {
+                const theta = Math.PI * (2 * k - 1) / (2 * n);
+                const poleRe = -wc * Math.sinh(beta) * Math.sin(theta);
+                const poleIm = wc * Math.cosh(beta) * Math.cos(theta);
+                
+                // Multiplicar denominador por (s - polo)
+                const factorRe = -poleRe;
+                const factorIm = s - poleIm;
+                
+                const newRe = denominator.re * factorRe - denominator.im * factorIm;
+                const newIm = denominator.re * factorIm + denominator.im * factorRe;
+                denominator.re = newRe;
+                denominator.im = newIm;
+            }
+            
+            // Normalizar para ganancia DC unitaria (Chebyshev)
+            // La ganancia DC para Chebyshev depende de si n es par o impar
+            if (n % 2 === 0) {
+                // Para n par, la ganancia DC es 1/sqrt(1 + eps²)
+                numerator.re = Math.abs(denominator.re) / Math.sqrt(1 + eps * eps);
+            } else {
+                // Para n impar, la ganancia DC es 1
+                numerator.re = Math.abs(denominator.re);
+            }
+        }
+
+        // Calcular H(jω) = Numerator / Denominator
+        const denomMagSq = denominator.re * denominator.re + denominator.im * denominator.im;
+        
+        const Hre = (numerator.re * denominator.re + numerator.im * denominator.im) / denomMagSq;
+        const Him = (numerator.im * denominator.re - numerator.re * denominator.im) / denomMagSq;
+        
+        const mag = Math.sqrt(Hre * Hre + Him * Him);
+        const phase = Math.atan2(Him, Hre);
+
+        return { mag: mag, phase: phase };
+    }
+
+    /* --- CANVAS --- */
+    const tCanvas = document.getElementById('timeCanvas');
+    const mCanvas = document.getElementById('magCanvas');
+    const pCanvas = document.getElementById('phaseCanvas');
+    const tCtx = tCanvas.getContext('2d');
+    const mCtx = mCanvas.getContext('2d');
+    const pCtx = pCanvas.getContext('2d');
+
+    function resizeCanvases() {
+        [tCanvas, mCanvas, pCanvas].forEach(c => {
+            c.width = c.parentElement.clientWidth;
+            c.height = c.parentElement.clientHeight;
+        });
+        renderBode();
+        if(!state.animating) renderTimeDomain();
+    }
+    new ResizeObserver(resizeCanvases).observe(document.querySelector('main'));
+
+    function drawGrid(ctx, w, h, type = 'linear') {
+        ctx.strokeStyle = CONFIG.colors.grid;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if(type === 'log') {
+            const minLog = Math.log10(50);
+            const maxLog = Math.log10(10000);
+            const scale = w / (maxLog - minLog);
+            for(let i=1; i<10; i++) {
+                [10, 100, 1000].forEach(base => {
+                    let freq = base * i;
+                    if(freq >= 50 && freq <= 10000) {
+                        let x = (Math.log10(freq) - minLog) * scale;
+                        ctx.moveTo(x, 0); ctx.lineTo(x, h);
+                    }
+                });
+            }
+        } else {
+            for(let x=0; x<w; x+=w/10) { ctx.moveTo(x,0); ctx.lineTo(x,h); }
+        }
+        for(let y=0; y<h; y+=h/4) { ctx.moveTo(0,y); ctx.lineTo(w,y); }
+        ctx.stroke();
+    }
+
+    function renderTimeDomain() {
+        const w = tCanvas.width;
+        const h = tCanvas.height;
+        const cy = h / 2;
+        
+        tCtx.fillStyle = '#000'; 
+        tCtx.fillRect(0,0,w,h);
+        drawGrid(tCtx, w, h);
+
+        tCtx.lineWidth = 2;
+        let clipping = false;
+        
+        // Entrada (Verde Brillante)
+        tCtx.beginPath();
+        for(let x=0; x<w; x+=2) {
+            let t = (x/w)*0.02 + state.time;
+            let y = 0;
+            state.harmonics.forEach(s => {
+                if(s.amp > 0) y += s.amp * Math.sin(2 * Math.PI * s.freq * t);
+            });
+            let py = cy - y * (h/250);
+            x===0 ? tCtx.moveTo(x, py) : tCtx.lineTo(x, py);
+        }
+        tCtx.strokeStyle = CONFIG.colors.inputSignal;
+        tCtx.shadowBlur = 5;
+        tCtx.shadowColor = CONFIG.colors.inputSignal;
+        tCtx.stroke();
+        tCtx.shadowBlur = 0;
+
+        // Salida (Azul)
+        tCtx.beginPath();
+        for(let x=0; x<w; x+=2) {
+            let t = (x/w)*0.02 + state.time;
+            let y = 0;
+            state.harmonics.forEach(s => {
+                if(s.amp > 0) {
+                    const tf = calculateTransferFunction(s.freq);
+                    y += (s.amp * tf.mag) * Math.sin(2 * Math.PI * s.freq * t + tf.phase);
+                }
+            });
+            if(Math.abs(y) > 100) clipping = true;
+            let py = cy - y * (h/250);
+            x===0 ? tCtx.moveTo(x, py) : tCtx.lineTo(x, py);
+        }
+        tCtx.strokeStyle = CONFIG.colors.outputSignal;
+        tCtx.shadowBlur = 10;
+        tCtx.shadowColor = CONFIG.colors.outputSignal;
+        tCtx.stroke();
+        tCtx.shadowBlur = 0;
+
+        const clipEl = document.getElementById('clip-indicator');
+        if(clipping) clipEl.classList.add('clipping');
+        else clipEl.classList.remove('clipping');
+    }
+
+    function renderBode() {
+        const mw = mCanvas.width; const mh = mCanvas.height;
+        mCtx.clearRect(0,0,mw,mh);
+        drawGrid(mCtx, mw, mh, 'log');
+
+        const minLog = Math.log10(50);
+        const maxLog = Math.log10(10000);
+        const scaleX = mw / (maxLog - minLog);
+
+        // Curva Magnitud Filtro
+        mCtx.beginPath();
+        mCtx.strokeStyle = CONFIG.colors.bodeLine;
+        mCtx.lineWidth = 2;
+        mCtx.setLineDash([5, 5]);
+        for(let x=0; x<mw; x+=2) {
+            const f = Math.pow(10, (x/scaleX) + minLog);
+            const tf = calculateTransferFunction(f);
+            const db = 20 * Math.log10(Math.max(tf.mag, 1e-10)); // Evitar log(0)
+            const y = mh * 0.5 - (db * (mh * 0.02)); // Ajustado para centrar mejor
+            x===0 ? mCtx.moveTo(x,y) : mCtx.lineTo(x,y);
+        }
+        mCtx.stroke();
+        mCtx.setLineDash([]);
+
+        // Barras Magnitud de TODOS los armónicos (incluso con amp=0)
+        mCtx.fillStyle = CONFIG.colors.magnitude;
+        state.harmonics.forEach((h, idx) => {
+            if(h.freq >= 50 && h.freq <= 10000) {
+                const tf = calculateTransferFunction(h.freq);
+                const magOut = h.amp * tf.mag;
+                const x = (Math.log10(h.freq) - minLog) * scaleX;
+                const barHeight = (magOut / 100) * (mh * 0.6);
+                
+                // Dibujar barra incluso si es muy pequeña (para visualizar todos los armónicos)
+                if(barHeight > 0.5 || h.amp > 0) {
+                    mCtx.fillRect(x-3, mh - Math.max(barHeight, 2), 6, Math.max(barHeight, 2));
+                }
+            }
+        });
+
+        // Curva Fase
+        const pw = pCanvas.width; const ph = pCanvas.height;
+        pCtx.clearRect(0,0,pw,ph);
+        drawGrid(pCtx, pw, ph, 'log');
+        const scalePX = pw / (maxLog - minLog);
+
+        pCtx.beginPath();
+        pCtx.strokeStyle = '#555';
+        pCtx.lineWidth = 2;
+        for(let x=0; x<pw; x+=2) {
+            const f = Math.pow(10, (x/scalePX) + minLog);
+            const tf = calculateTransferFunction(f);
+            const deg = tf.phase * (180/Math.PI);
+            const y = ph * 0.5 - (deg * (ph/180)); // Ajustado para centrar
+            x===0 ? pCtx.moveTo(x,y) : pCtx.lineTo(x,y);
+        }
+        pCtx.stroke();
+
+        // Puntos Fase de TODOS los armónicos
+        pCtx.fillStyle = CONFIG.colors.phase;
+        state.harmonics.forEach((h, idx) => {
+            if(h.freq >= 50 && h.freq <= 10000) {
+                const tf = calculateTransferFunction(h.freq);
+                const x = (Math.log10(h.freq) - minLog) * scalePX;
+                const deg = tf.phase * (180/Math.PI);
+                const y = ph * 0.5 - (deg * (ph/180));
+                
+                // Dibujar punto siempre (para visualizar todos los armónicos)
+                pCtx.beginPath(); 
+                pCtx.arc(x, y, h.amp > 0 ? 5 : 3, 0, Math.PI*2); 
+                pCtx.fill();
+            }
+        });
+    }
+
+    function animate() {
+        if(!state.animating) return;
+        state.time += 0.0003;
+        renderTimeDomain();
+        requestAnimationFrame(animate);
+    }
+
+    animate();
+
+</script>
+</body>
+</html>
